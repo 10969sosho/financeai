@@ -53,7 +53,7 @@ Seed default (CT-1):
 | amount | unsignedBigInteger | TR-1: rupiah bulat > 0 |
 | description | string(255) | dari ucapan user |
 | occurred_at | timestamp | TR-3/TR-4, default now, index utama laporan |
-| source | enum('ai','manual','voice','image') default 'ai' | jejak asal input |
+| source | enum('ai','manual','voice','image') default 'manual' | jejak asal input; ditulis eksplisit oleh Action layer |
 | deleted_at | softDelete nullable | TR-5 |
 | created_at / updated_at | timestamps | |
 

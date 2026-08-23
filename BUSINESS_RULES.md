@@ -18,7 +18,7 @@
 | # | Aturan |
 |---|---|
 | CT-1 | Ada kategori **default global** (`user_id = NULL`) yang di-seed: expense → Makanan, Minuman, Transportasi, Belanja, Hiburan, Tagihan, Lainnya; income → Gaji, Project, Bonus, Transfer, Lainnya. |
-| CT-2 | User bisa punya **kategori custom** (`user_id` terisi). Nama kategori unik per user per type (case-insensitive). |
+| CT-2 | User bisa punya **kategori custom** (`user_id` terisi). Nama kategori unik per user per type (case-insensitive). Nama custom juga tidak boleh bentrok dengan nama kategori default global (mencegah ambigu saat resolusi kategori AI). |
 | CT-3 | Kategori default global tidak bisa diubah/dihapus user mana pun. |
 | CT-4 | Saat AI tidak yakin kategori → pakai **"Lainnya"** sesuai type. Dilarang membuat kategori baru otomatis di MVP. |
 | CT-5 | Kategori dengan transaksi terhubung tidak boleh di-hard-delete (soft delete / blokir). |

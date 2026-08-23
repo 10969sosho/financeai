@@ -68,8 +68,8 @@ Prioritas implementasi (urutan):
 | Fase | Isi | Status |
 |---|---|---|
 | 0 | Dokumentasi suite | ✅ selesai |
-| 1 | Scaffold Laravel API + Auth + DB + seed kategori | berikutnya |
-| 2 | Chat + AI agent + financial actions (text) | - |
+| 1 | Scaffold Laravel API + Auth + DB + seed kategori | ✅ selesai |
+| 2 | Chat + AI agent + financial actions (text) | berikutnya |
 | 3 | Laporan + breakdown | - |
 | 4 | Hardening: rate limit, queue async, logging aksi AI | - |
 | 5 | Flutter app (Chat, Laporan, Profile) | - |
