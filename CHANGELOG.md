@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com) — versi semantik.
 - Suite dokumentasi awal: PROJECT_CONTEXT, ARCHITECTURE, BUSINESS_RULES, DATABASE, API_REFERENCE, CODING_STANDARDS, CHANGELOG.
 - Keputusan teknis fondasi: Laravel 13 API-only, Sanctum auth, SQLite→MySQL, Laravel AI SDK agent+tools, Action layer untuk mutasi data.
 
+## [0.2.0] — 2026-08-23
+
+### Added
+- Endpoint inti `POST /api/v1/chat`: simpan pesan → agent AI → tool loop → respons + transaksi terdampak (kontrak API_REFERENCE dipenuhi).
+- Agent `FinancialAssistant` (laravel/ai v0.11) + system prompt Indonesia server-side; 6 tools finansial (create/update/delete/list transaction, balance, report) yang semuanya delegasi ke Action layer — AI tidak pernah menulis DB langsung (AI-1).
+- `ResolveCategoryAction`: resolusi nama kategori bebas → custom user → default global → fallback "Lainnya" (CT-4).
+- `ChatService`: session auto-title, konteks 20 pesan terakhir (CS-2), audit trail `metadata.actions` (AI-8), 503 saat provider gagal dengan pesan user tetap tersimpan.
+- Rate limit chat 30 req/menit/user → 429 (IS-3).
+- 12 test baru bernama sesuai ID aturan (AI/CS/IS); total **46 test / 294 assertions hijau**.
+- Smoke test live end-to-end terhadap OpenAI: "makan" → kategori Makanan → transaksi tersimpan (`source=ai`) + audit trail.
+
+### Changed
+- ARCHITECTURE.md §5 disesuaikan realita API laravel/ai v0.11 (signature Tool/Agent, pola fake per-step).
+
 ## [0.1.0] — 2026-08-23
 
 ### Added

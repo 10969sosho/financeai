@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CategoryController;
+use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\ChatSessionController;
 use App\Http\Controllers\Api\V1\MessageController;
 use App\Http\Controllers\Api\V1\ReportController;
@@ -24,6 +25,11 @@ Route::prefix('v1')->group(function (): void {
         Route::post('sessions', [ChatSessionController::class, 'store']);
         Route::delete('sessions/{chat_session}', [ChatSessionController::class, 'destroy']);
         Route::get('sessions/{chat_session}/messages', [MessageController::class, 'index']);
+
+        // Endpoint inti MVP (IS-3: rate limit 30 req/menit/user)
+        Route::middleware('throttle:chat')->group(function (): void {
+            Route::post('chat', [ChatController::class, 'store']);
+        });
 
         // Transactions
         Route::get('transactions', [TransactionController::class, 'index']);

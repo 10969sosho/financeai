@@ -131,11 +131,17 @@ final class CreateTransactionAction
 }
 ```
 
-### Tool (AI SDK)
+### Tool (AI SDK — laravel/ai v0.11)
+
+> Catatan versi: SDK masih 0.x. Realita v0.11: Agent = class yang implement `Agent` + `Conversational` + `HasTools` dengan trait `Promptable` (`instructions()`, `messages()`, `tools()`). Tool = `description()` + `schema(JsonSchema)` + `handle(Laravel\Ai\Tools\Request): string|Stringable`. Nama tool = basename class. User TIDAK lewat argumen handle — user di-bind ke tool saat agent dibangun per-request (menegakkan AI-6).
 
 ```php
 final class CreateTransactionTool implements Tool
 {
+    public function __construct(
+        private readonly User $user, // di-inject ChatService per request
+    ) {}
+
     public function description(): string
     {
         return 'Catat transaksi keuangan user. Gunakan setelah nominal & jenis jelas.';
@@ -152,21 +158,27 @@ final class CreateTransactionTool implements Tool
         ];
     }
 
-    public function handle(Request $request, User $user): string
+    public function handle(Request $request): string
     {
-        $result = app(CreateTransactionAction::class)->execute($user, $request->all());
+        $result = app(CreateTransactionAction::class)
+            ->execute($this->user, $request->all()); // validasi tetap di Action layer
+
         return json_encode(['ok' => true, 'transaction_id' => $result->id]);
     }
 }
 ```
+
+Kegagalan validasi tool dikembalikan sebagai observasi `{ok:false, error}` ke model (bukan exception) — hanya kegagalan infrastruktur provider (`AiException`) yang menjadi 503.
 
 ### Testing AI tanpa provider
 
 ```php
 FinancialAssistant::fake(['Transaksi dicatat: Makanan Rp25.000']);
 // ... panggil endpoint chat ...
-FinancialAssistant::assertPrompted('makan 25 ribu');
+FinancialAssistant::assertPrompted(fn ($prompt) => /* cek konteks CS-2 */ true);
 ```
+
+Fake response dikonsumsi **per step**: fake berisi `ToolCall` membuat SDK mengeksekusi tool sungguhan lalu lanjut ke response fake berikutnya — sehingga pipeline chat→tool→Action→DB teruji penuh tanpa memanggil OpenAI.
 
 ## 6. Skalabilitas
 
