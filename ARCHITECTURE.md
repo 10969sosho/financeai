@@ -60,9 +60,11 @@ app/
 │       ├── DeleteTransactionAction.php
 │       └── ResolveCategoryAction.php
 ├── Services/
-│   ├── ChatService.php                 # Orkestrasi: simpan pesan → agent → simpan respons
+│   ├── ChatService.php                 # Orkestrasi: handle() → pending + dispatch; process() → agent + audit
 │   ├── ReportService.php               # Agregasi laporan
 │   └── BalanceService.php
+├── Jobs/
+│   └── ProcessChatMessage.php          # Async queue job: prompt agent → update message → log activity
 ├── Http/
 │   ├── Controllers/Api/V1/             # Thin controllers
 │   ├── Requests/                       # Form requests (validasi)
@@ -87,21 +89,27 @@ Aturan penempatan:
 
 ```text
 POST /api/v1/chat { session_id?, body }
-  1. StoreMessage        : validasi + simpan message role=user
-  2. ChatService.handle  :
-     a. Kumpulkan konteks: N pesan terakhir session + kandidat transaksi yang dibahas
-     b. FinancialAssistant::prompt(context + body)
-     c. Agent memutuskan: butuh tool call atau jawab biasa
+  1. ChatService.handle :
+     a. Simpan message role=user (CS-4)
+     b. Buat pending assistant message (status=pending)
+     c. Dispatch ProcessChatMessage ke queue → return segera
+  2. ProcessChatMessage job (async via queue):
+     a. Update status → processing
+     b. Kumpulkan konteks: N pesan terakhir session + kandidat transaksi
+     c. FinancialAssistant::prompt(context + body)
+     d. Agent memutuskan: butuh tool call atau jawab biasa
   3. Tool call → Action layer:
      - ResolveCategoryAction : map nama → category_id (fallback "Lainnya")
      - CreateTransactionAction (mis.): validasi amount>0, type, occurred_at
        → DB::transaction → insert → return transaction
-  4. Simpan message role=assistant
-     metadata.actions = [{action, payload, result, transaction_id}]
-  5. Response JSON: assistant message + daftar actions + transaksi terdampak
+  4. Update assistant message:
+     - content = respons AI
+     - metadata.actions = jejak audit
+     - status = completed (atau failed jika provider error)
+  5. Log activity ke activity_logs table
 ```
 
-Error path: tool/action gagal validasi → agent menerima hasil error sebagai observasi → AI menjelaskan/menanyakan ulang ke user (tidak crash). Kegagalan infrastruktur AI → 503 dengan pesan standar, pesan user tetap tersimpan.
+Error path: tool/action gagal validasi → agent menerima hasil error sebagai observasi → AI menjelaskan/menanyakan ulang ke user (tidak crash). Kegagalan infrastruktur AI → status message = 'failed', pesan user tetap tersimpan. Client poll `GET /sessions/{id}/messages` untuk cek status.
 
 ## 5. Pola Kode Wajib
 
@@ -186,7 +194,7 @@ Fase cepat → siap tumbuh:
 
 1. **Stateless API** — bisa horizontal scale kapan saja (token auth, tanpa session server).
 2. **Index tepat** — lihat DATABASE.md; query laporan memakai index `(user_id, occurred_at)`.
-3. **Queue-ready** — ChatService ditulis sebagai method biasa; jika latensi AI naik, pindahkan ke job (`ProcessChatMessage`) + polling/streaming tanpa mengubah Action layer.
+3. **Queue-ready** — ChatService.handle() dispatches ProcessChatMessage ke queue; job memanggil ChatService.process() secara async. Sync queue untuk testing, database/Redis untuk production.
 4. **Provider failover** — AI SDK mendukung failover provider; konfigurasi di env.
 5. **Agregasi laporan** — live query dulu; jika berat, tambah cache per-user-per-periode dengan invalidasi on-write.
 

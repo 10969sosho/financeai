@@ -7,6 +7,7 @@
 ```text
 users 1───* transactions *───1 categories
 users 1───* chat_sessions 1───* messages
+users 1───* activity_logs (polymorphic subject)
 categories: user_id NULL = default global (seed)
 ```
 
@@ -86,9 +87,30 @@ Index: `(user_id, last_message_at)`.
 | chat_session_id | foreignId → chat_sessions, cascadeOnDelete | CS-3: hapus session ikut hapus pesan |
 | user_id | foreignId → users, cascadeOnDelete | isolasi |
 | role | enum('user','assistant','system') | |
-| content | text | isi pesan |
+| status | enum('pending','processing','completed','failed') default 'completed' | async chat status; user messages selalu 'completed' |
+| content | text | isi pesan; kosong saat pending |
 | metadata | json nullable | AI-8: `{actions:[{action,payload,result,transaction_id}]}` |
 | created_at / updated_at | timestamps | |
+
+### activity_logs
+
+| Kolom | Tipe | Ket |
+|---|---|---|
+| id | bigint PK | |
+| user_id | foreignId → users, cascadeOnDelete | |
+| action | string | e.g. `create_transaction`, `get_balance` |
+| subject_type | string nullable | polymorphic (Transaction, dll) |
+| subject_id | bigint nullable | |
+| payload | json nullable | argumen dari AI |
+| result | enum('ok','error') | |
+| error_message | text nullable | |
+| created_at | timestamp | |
+
+Index:
+
+- `(user_id, action)` — filter by action type
+- `(user_id, created_at)` — timeline per user
+- `(subject_type, subject_id)` — polymorphic lookup
 
 ## Konvensi
 

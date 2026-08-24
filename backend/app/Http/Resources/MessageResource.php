@@ -14,7 +14,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 final class MessageResource extends JsonResource
 {
     /**
-     * @return array{id: int, role: string, content: string, metadata: mixed, created_at: ?string}
+     * @return array{id: int, role: string, content: string, status: string, metadata: mixed, created_at: ?string}
      */
     public function toArray(Request $request): array
     {
@@ -22,6 +22,7 @@ final class MessageResource extends JsonResource
             'id' => $this->id,
             'role' => $this->role,
             'content' => $this->content,
+            'status' => $this->status,
             'metadata' => $this->metadata,
             'created_at' => $this->created_at?->toIso8601String(),
         ];

@@ -70,8 +70,9 @@ Daftar session user, urut `last_message_at` desc.
 ```json
 {
   "data": [
-    { "id": 101, "role": "user",      "content": "tadi makan 25 ribu", "metadata": null, "created_at": "..." },
+    { "id": 101, "role": "user",      "content": "tadi makan 25 ribu", "status": "completed", "metadata": null, "created_at": "..." },
     { "id": 102, "role": "assistant", "content": "Oke, dicatat ya: Makanan Rp25.000.",
+      "status": "completed",
       "metadata": { "actions": [ { "action": "create_transaction", "result": "ok",
         "transaction_id": 88, "payload": { "type": "expense", "amount": 25000, "category": "Makanan" } } ] },
       "created_at": "..." }
@@ -87,27 +88,29 @@ Daftar session user, urut `last_message_at` desc.
 ```
 
 ```json
-// 200 — respons assistant + efek data
+// 200 — respons assistant + efek data (async: status pending, diproses via queue)
 {
   "data": {
     "message": {
       "id": 104, "role": "assistant",
-      "content": "Sudah dicatat: Minuman Rp20.000.",
-      "metadata": { "actions": [ { "action": "create_transaction", "result": "ok", "transaction_id": 89,
-        "payload": { "type": "expense", "amount": 20000, "category": "Minuman", "description": "beli kopi" } } ] }
+      "content": "",
+      "status": "pending",
+      "metadata": null,
+      "created_at": "..."
     },
-    "transactions": [
-      { "id": 89, "type": "expense", "amount": 20000, "description": "beli kopi",
-        "category": { "id": 9, "name": "Minuman" }, "occurred_at": "..." }
-    ]
+    "transactions": []
   }
 }
 ```
 
 Perilaku:
 
-- Ambigu (AI-3) → 200 dengan pertanyaan klarifikasi, `transactions: []`, tanpa action.
-- Koreksi (AI-4) → action `update_transaction` pada transaction_id yang dirujuk.
+- Response langsung dengan status `pending`; AI diproses via queue async.
+- Client poll `GET /sessions/{id}/messages` untuk cek `status` field.
+- Status berubah: `pending` → `processing` → `completed` (atau `failed`).
+- Ambigu (AI-3) → `completed` dengan pertanyaan klarifikasi, `transactions: []`.
+- Koreksi (AI-4) → `completed` dengan action `update_transaction`.
+- Provider gagal → `failed` dengan pesan error.
 - Rate limit 30 req/menit/user (IS-3) → 429.
 
 ---

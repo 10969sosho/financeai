@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Ai\Agents\FinancialAssistant;
 use App\Exceptions\AiProviderFailedException;
+use App\Jobs\ProcessChatMessage;
 use App\Models\ChatSession;
 use App\Models\Message;
 use App\Models\Transaction;
@@ -23,7 +24,8 @@ use Laravel\Ai\Responses\Data\ToolResult;
 
 /**
  * Orkestrasi pipeline chat (ARCHITECTURE §4):
- * simpan pesan user → prompt agent (+tool loop SDK) → simpan respons assistant
+ * Fase 1 — handle(): simpan pesan user → buat pending assistant msg → dispatch job → return
+ * Fase 2 — process(): prompt agent (+tool loop SDK) → update assistant msg → audit trail
  * dengan metadata.actions sebagai jejak audit (AI-8).
  */
 final readonly class ChatService
@@ -32,7 +34,9 @@ final readonly class ChatService
     private const CONTEXT_WINDOW = 20;
 
     /**
-     * @return array{message: Message, transactions: Collection<int, Transaction>}
+     * Fase 1: Simpan user message + pending assistant message + dispatch job.
+     *
+     * @return array{message: Message, session: ChatSession}
      */
     public function handle(User $user, ?int $sessionId, string $body): array
     {
@@ -55,22 +59,13 @@ final readonly class ChatService
             return $message;
         });
 
-        // 2. Konteks: N pesan terakhir session (CS-2).
-        $context = $this->contextMessagesFor($session);
-
-        // 3. Prompt agent — SDK menjalankan tool loop; tool delegasi ke Action layer.
-        $response = $this->promptAgent($user, $context, $body);
-
-        // 4. metadata.actions = jejak audit eksekusi tool (AI-8).
-        [$actions, $affectedIds] = $this->buildAuditTrail($response);
-
-        // 5. Simpan respons assistant.
-        $assistantMessage = DB::transaction(function () use ($session, $user, $response, $actions): Message {
+        // 2. Buat pending assistant message — akan diupdate oleh job.
+        $assistantMessage = DB::transaction(function () use ($session, $user): Message {
             $message = $session->messages()->create([
                 'user_id' => $user->id,
                 'role' => 'assistant',
-                'content' => $response->text,
-                'metadata' => ['actions' => $actions],
+                'content' => '',
+                'status' => 'pending',
             ]);
 
             $session->forceFill(['last_message_at' => $message->created_at])->save();
@@ -78,12 +73,70 @@ final readonly class ChatService
             return $message;
         });
 
-        // 6. Transaksi terdampak untuk respons API.
-        $transactions = $affectedIds === []
-            ? collect()
-            : $user->transactions()->with('category')->whereIn('id', $affectedIds)->get();
+        // 3. Dispatch job ke queue — user tidak menunggu.
+        ProcessChatMessage::dispatch(
+            $assistantMessage->id,
+            $session->id,
+            $user->id,
+        );
 
-        return ['message' => $assistantMessage, 'transactions' => $transactions];
+        return ['message' => $assistantMessage, 'session' => $session];
+    }
+
+    /**
+     * Fase 2: Dipanggil oleh ProcessChatMessage job.
+     * Prompt agent → update assistant message → return audit trail.
+     *
+     * @return array{actions: array<int, array<string, mixed>>, affectedIds: array<int, int>}
+     */
+    public function process(User $user, int $sessionId, Message $assistantMessage): array
+    {
+        /** @var ChatSession $session */
+        $session = $user->chatSessions()->findOrFail($sessionId);
+
+        // Ambil pesan user terakhir (body) untuk prompt.
+        /** @var Message $lastUserMessage */
+        $lastUserMessage = $session->messages()
+            ->where('role', 'user')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+
+        // Konteks: N pesan terakhir session (CS-2).
+        $context = $this->contextMessagesFor($session);
+
+        // Prompt agent — SDK menjalankan tool loop; tool delegasi ke Action layer.
+        $response = $this->promptAgent($user, $context, $lastUserMessage->content);
+
+        // metadata.actions = jejak audit eksekusi tool (AI-8).
+        [$actions, $affectedIds] = $this->buildAuditTrail($response);
+
+        // Update assistant message dengan hasil.
+        DB::transaction(function () use ($assistantMessage, $user, $response, $actions, $session): void {
+            $assistantMessage->update([
+                'content' => $response->text,
+                'metadata' => ['actions' => $actions],
+                'status' => 'completed',
+            ]);
+
+            $session->forceFill(['last_message_at' => $assistantMessage->fresh()->created_at])->save();
+        });
+
+        return ['actions' => $actions, 'affectedIds' => $affectedIds];
+    }
+
+    /**
+     * Ambil transaksi terdampak untuk respons API.
+     *
+     * @param  array<int, int>  $affectedIds
+     */
+    public function getAffectedTransactions(User $user, array $affectedIds): Collection
+    {
+        if ($affectedIds === []) {
+            return collect();
+        }
+
+        return $user->transactions()->with('category')->whereIn('id', $affectedIds)->get();
     }
 
     private function resolveSession(User $user, ?int $sessionId): ChatSession
@@ -105,11 +158,19 @@ final readonly class ChatService
     private function contextMessagesFor(ChatSession $session): array
     {
         return $session->messages()
+            ->where(function ($query): void {
+                // Hanya user messages + assistant yang sudah selesai/failed (punya konten).
+                $query->where('role', 'user')
+                    ->orWhere(function ($q): void {
+                        $q->where('role', 'assistant')
+                            ->whereIn('status', ['completed', 'failed']);
+                    });
+            })
             ->orderByDesc('created_at')
-            ->orderByDesc('id') // ambil window terakhir...
+            ->orderByDesc('id')
             ->limit(self::CONTEXT_WINDOW)
             ->get()
-            ->reverse() // ...lalu kembalikan ke urutan kronologis
+            ->reverse()
             ->values()
             ->map(fn (Message $message): AgentMessage => match ($message->role) {
                 'assistant' => new AgentAssistantMessage($message->content),

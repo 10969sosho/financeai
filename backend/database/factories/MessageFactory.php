@@ -22,7 +22,37 @@ final class MessageFactory extends Factory
             'role' => 'user',
             'content' => fake()->sentence(),
             'metadata' => null,
+            'status' => 'completed',
         ];
+    }
+
+    public function pending(): static
+    {
+        return $this->state(fn (): array => [
+            'status' => 'pending',
+            'content' => '',
+        ]);
+    }
+
+    public function processing(): static
+    {
+        return $this->state(fn (): array => [
+            'status' => 'processing',
+        ]);
+    }
+
+    public function completed(): static
+    {
+        return $this->state(fn (): array => [
+            'status' => 'completed',
+        ]);
+    }
+
+    public function failed(): static
+    {
+        return $this->state(fn (): array => [
+            'status' => 'failed',
+        ]);
     }
 
     public function fromAssistant(): static

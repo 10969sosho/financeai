@@ -8,6 +8,25 @@ Format: [Keep a Changelog](https://keepachangelog.com) — versi semantik.
 - Suite dokumentasi awal: PROJECT_CONTEXT, ARCHITECTURE, BUSINESS_RULES, DATABASE, API_REFERENCE, CODING_STANDARDS, CHANGELOG.
 - Keputusan teknis fondasi: Laravel 13 API-only, Sanctum auth, SQLite→MySQL, Laravel AI SDK agent+tools, Action layer untuk mutasi data.
 
+## [0.3.0] — 2026-08-24
+
+### Added
+- **Queue async chat**: `ProcessChatMessage` job — POST /chat return segera dengan status `pending`, AI diproses via queue. Client poll `GET /sessions/{id}/messages` untuk cek status.
+- **Activity log**: Tabel `activity_logs` — audit trail terstruktur untuk setiap tool execution AI. Polymorphic subject (Transaction, dll). Log otomatis via ProcessChatMessage job.
+- Kolom `status` pada tabel messages: `pending`, `processing`, `completed`, `failed`.
+- Factory baru: `ActivityLogFactory`.
+- 14 test untuk async chat + activity log.
+
+### Changed
+- `ChatService` di-refactor: `handle()` (save + dispatch) terpisah dari `process()` (untuk job execution).
+- `ChatController::store()` return segera tanpa menunggu AI response.
+- `MessageResource` menyertakan field `status`.
+- Context window AI (`contextMessagesFor`) exclude pending assistant messages.
+- `process()` mengambil context langsung dari session (termasuk pesan baru), bukan dari parameter handle().
+
+### Removed
+- `POST /chat` tidak lagi return 503 saat provider gagal — cukup set status `failed` pada message.
+
 ## [0.2.0] — 2026-08-23
 
 ### Added

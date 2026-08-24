@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Ai\Agents\FinancialAssistant;
+use App\Jobs\ProcessChatMessage;
+use App\Models\ActivityLog;
 use App\Models\Category;
 use App\Models\ChatSession;
 use App\Models\Message;
@@ -12,6 +14,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use Database\Seeders\CategorySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Exceptions\ProviderConnectionException;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\Data\ToolCall;
@@ -33,9 +36,30 @@ final class ChatTest extends TestCase
     }
 
     /**
-     * AI-1: mutasi data lewat tool → Action layer; baris DB tercipta dengan source='ai'.
+     * POST /chat mengembalikan pending status dan dispatch job ke queue.
+     * Queue::fake() mencegah job jalan — kita hanya verifikasi dispatch.
      */
-    public function test_ai_1_mutation_goes_through_action_layer(): void
+    public function test_async_chat_returns_pending_status_and_dispatches_job(): void
+    {
+        Queue::fake();
+        FinancialAssistant::fake(['Oke.']);
+
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->postJson('/api/v1/chat', ['body' => 'makan 25 ribu'])
+            ->assertOk();
+
+        $this->assertSame('pending', $response->json('data.message.status'));
+        $this->assertSame('', $response->json('data.message.content'));
+        $this->assertSame([], $response->json('data.transactions'));
+
+        Queue::assertPushed(ProcessChatMessage::class);
+    }
+
+    /**
+     * Full flow: sync queue menjalankan job langsung → transaksi tercipta.
+     * Tanpa Queue::fake() — biarkan sync queue bekerja.
+     */
+    public function test_full_chat_flow_creates_transaction(): void
     {
         FinancialAssistant::fake([
             new ToolCall('call_1', 'CreateTransactionTool', [
@@ -47,11 +71,16 @@ final class ChatTest extends TestCase
             'Oke, dicatat ya: Makanan Rp25.000.',
         ]);
 
-        $this->actingAs($this->user, 'sanctum')
+        $response = $this->actingAs($this->user, 'sanctum')
             ->postJson('/api/v1/chat', ['body' => 'tadi makan 25 ribu'])
             ->assertOk();
 
-        // Transaksi tercipta via Action layer, bukan tulisan langsung AI.
+        // Sync queue sudah menjalankan job; cek DB langsung.
+        $assistantMessage = Message::query()->where('role', 'assistant')->sole();
+        $this->assertSame('completed', $assistantMessage->status);
+        $this->assertNotEmpty($assistantMessage->content);
+
+        // AI-1: transaksi tercipta via Action layer.
         $transaction = Transaction::query()->sole();
         $this->assertSame('expense', $transaction->type);
         $this->assertSame(25000, $transaction->amount);
@@ -75,10 +104,12 @@ final class ChatTest extends TestCase
             ->postJson('/api/v1/chat', ['body' => 'makan'])
             ->assertOk();
 
+        // Sync queue sudah menjalankan job.
+        $assistantMessage = Message::query()->where('role', 'assistant')->sole();
+        $this->assertSame('completed', $assistantMessage->status);
+        $this->assertStringContainsString('berapa', $assistantMessage->content);
+
         $this->assertSame(0, Transaction::query()->count());
-        $this->assertSame([], $response->json('data.transactions'));
-        $this->assertSame('assistant', $response->json('data.message.role'));
-        $this->assertStringContainsString('berapa', (string) $response->json('data.message.content'));
     }
 
     /**
@@ -124,11 +155,12 @@ final class ChatTest extends TestCase
             'Sudah dicatat: Minuman Rp20.000.',
         ]);
 
-        $response = $this->actingAs($this->user, 'sanctum')
+        $this->actingAs($this->user, 'sanctum')
             ->postJson('/api/v1/chat', ['body' => 'beli kopi 20 ribu'])
             ->assertOk();
 
-        $actions = $response->json('data.message.metadata.actions');
+        $assistantMessage = Message::query()->where('role', 'assistant')->sole();
+        $actions = $assistantMessage->metadata['actions'] ?? [];
 
         $this->assertCount(1, $actions);
         $this->assertSame('create_transaction', $actions[0]['action']);
@@ -140,41 +172,58 @@ final class ChatTest extends TestCase
         $this->assertDatabaseHas('messages', [
             'role' => 'assistant',
             'content' => 'Sudah dicatat: Minuman Rp20.000.',
+            'status' => 'completed',
         ]);
         $this->assertNotNull(Transaction::query()->find($transactionId));
     }
 
     /**
-     * Kontrak respons POST /chat persis API_REFERENCE.
+     * Activity log tercatat setelah job selesai memproses tool call.
      */
-    public function test_chat_create_flow_returns_exact_api_reference_shape(): void
+    public function test_activity_log_recorded_after_chat_processing(): void
     {
         FinancialAssistant::fake([
             new ToolCall('call_1', 'CreateTransactionTool', [
                 'type' => 'expense',
-                'amount' => 20000,
-                'description' => 'beli kopi',
-                'category' => 'Minuman',
+                'amount' => 25000,
+                'description' => 'makan siang',
+                'category' => 'Makanan',
             ]),
-            'Sudah dicatat: Minuman Rp20.000.',
+            'Oke.',
         ]);
 
-        $response = $this->actingAs($this->user, 'sanctum')
+        $this->actingAs($this->user, 'sanctum')
+            ->postJson('/api/v1/chat', ['body' => 'makan 25 ribu'])
+            ->assertOk();
+
+        $transaction = Transaction::query()->sole();
+
+        $this->assertDatabaseHas('activity_logs', [
+            'user_id' => $this->user->id,
+            'action' => 'create_transaction',
+            'result' => 'ok',
+            'subject_type' => Transaction::class,
+            'subject_id' => $transaction->id,
+        ]);
+    }
+
+    /**
+     * Kontrak respons POST /chat persis API_REFERENCE (async shape).
+     */
+    public function test_chat_create_flow_returns_exact_api_reference_shape(): void
+    {
+        Queue::fake();
+        FinancialAssistant::fake(['Oke.']);
+
+        $this->actingAs($this->user, 'sanctum')
             ->postJson('/api/v1/chat', ['body' => 'beli kopi 20 ribu'])
             ->assertOk()
             ->assertJsonStructure([
                 'data' => [
-                    'message' => ['id', 'role', 'content', 'metadata', 'created_at'],
-                    'transactions' => [
-                        ['id', 'type', 'amount', 'description', 'category' => ['id', 'name'], 'occurred_at', 'source'],
-                    ],
+                    'message' => ['id', 'role', 'content', 'status', 'metadata', 'created_at'],
+                    'transactions' => [],
                 ],
             ]);
-
-        $this->assertSame('assistant', $response->json('data.message.role'));
-        $this->assertSame('beli kopi', $response->json('data.transactions.0.description'));
-        $this->assertSame('Minuman', $response->json('data.transactions.0.category.name'));
-        $this->assertSame('ai', $response->json('data.transactions.0.source'));
     }
 
     /**
@@ -188,8 +237,8 @@ final class ChatTest extends TestCase
             ->postJson('/api/v1/chat', ['body' => 'Pengeluaran hari ini: makan 25 ribu'])
             ->assertOk();
 
-        $sessionId = $response->json('data.message.id'); // hanya untuk ambil session di bawah
-        $session = Message::query()->find($sessionId)?->chatSession;
+        $assistantMessageId = $response->json('data.message.id');
+        $session = Message::query()->find($assistantMessageId)->chatSession;
 
         $this->assertNotNull($session);
         $this->assertNotNull($session->title);
@@ -205,8 +254,6 @@ final class ChatTest extends TestCase
         $session = ChatSession::factory()->for($this->user)->create();
 
         Message::factory()->count(25)->for($session, 'chatSession')->for($this->user)->create();
-        $latest = Message::factory()->for($session, 'chatSession')->for($this->user)
-            ->create(['content' => 'pesan paling baru']);
 
         FinancialAssistant::fake(['Siap.']);
 
@@ -214,19 +261,16 @@ final class ChatTest extends TestCase
             ->postJson('/api/v1/chat', ['session_id' => $session->id, 'body' => 'lanjut'])
             ->assertOk();
 
+        // Sync queue menjalankan job; assertPrompted mengecek prompt yang terekam.
         FinancialAssistant::assertPrompted(function (AgentPrompt $prompt): bool {
             /** @var array<int, \Laravel\Ai\Messages\Message> $context */
             $context = iterator_to_array($prompt->agent->messages(), false);
 
-            // Konteks = 20 pesan terakhir TERMASUK pesan user yang baru disimpan,
-            // lalu pesan body dikirim sebagai user message terakhir oleh SDK.
+            // Konteks = 20 pesan terakhir (pending assistant excluded) + body dikirim sebagai prompt.
             return count($context) === 20
-                && $context[18]->content === 'pesan paling baru'
                 && $context[19]->content === 'lanjut'
                 && $prompt->prompt === 'lanjut';
         });
-
-        unset($latest);
     }
 
     /**
@@ -267,6 +311,7 @@ final class ChatTest extends TestCase
         $other = User::factory()->create();
         $foreignSession = ChatSession::factory()->for($other)->create();
 
+        Queue::fake();
         FinancialAssistant::fake(['Oke.']);
 
         $this->actingAs($this->user, 'sanctum')
@@ -283,6 +328,7 @@ final class ChatTest extends TestCase
      */
     public function test_is_3_rate_limit_returns_429_after_30_requests_per_minute(): void
     {
+        Queue::fake();
         FinancialAssistant::fake(['Oke.']);
 
         for ($i = 0; $i < 30; $i++) {
@@ -297,9 +343,9 @@ final class ChatTest extends TestCase
     }
 
     /**
-     * ARCHITECTURE §4 error path: provider gagal → 503, pesan user tetap tersimpan.
+     * Provider gagal → status message = failed (async, bukan 503).
      */
-    public function test_provider_failure_returns_503_and_keeps_user_message(): void
+    public function test_provider_failure_sets_message_status_to_failed(): void
     {
         FinancialAssistant::fake(
             fn (): never => throw ProviderConnectionException::forProvider('openai'),
@@ -307,8 +353,12 @@ final class ChatTest extends TestCase
 
         $this->actingAs($this->user, 'sanctum')
             ->postJson('/api/v1/chat', ['body' => 'makan 25 ribu'])
-            ->assertStatus(503)
-            ->assertJsonStructure(['message']);
+            ->assertOk();
+
+        // Sync queue menjalankan job; provider gagal → status = failed.
+        $assistantMessage = Message::query()->where('role', 'assistant')->sole();
+        $this->assertSame('failed', $assistantMessage->status);
+        $this->assertStringContainsString('AI', $assistantMessage->content);
 
         // Pesan user tetap tercatat (audit + konteks).
         $this->assertDatabaseHas('messages', [

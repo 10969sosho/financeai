@@ -25,6 +25,7 @@ final class Message extends Model
         'role',
         'content',
         'metadata',
+        'status',
     ];
 
     protected static function booted(): void
