@@ -62,7 +62,8 @@ app/
 ├── Services/
 │   ├── ChatService.php                 # Orkestrasi: handle() → pending + dispatch; process() → agent + audit
 │   ├── ReportService.php               # Agregasi laporan
-│   └── BalanceService.php
+│   ├── BalanceService.php
+│   └── ReceiptExtractionService.php    # Ekstraksi data struk via AI vision attachments
 ├── Jobs/
 │   └── ProcessChatMessage.php          # Async queue job: prompt agent → update message → log activity
 ├── Http/
@@ -209,7 +210,9 @@ mobile/
 │   │   ├── chat_service.dart        # Sessions CRUD + messages + send
 │   │   ├── transaction_service.dart # Transaction CRUD
 │   │   ├── report_service.dart      # Summary + breakdown
-│   │   └── category_service.dart    # Categories list + create
+│   │   ├── category_service.dart    # Categories list + create
+│   │   ├── voice_service.dart       # Speech-to-text (speech_to_text package)
+│   │   └── image_service.dart       # Camera/gallery picker + receipt upload
 │   ├── screens/
 │   │   ├── auth/
 │   │   │   ├── login_screen.dart

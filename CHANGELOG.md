@@ -8,6 +8,21 @@ Format: [Keep a Changelog](https://keepachangelog.com) — versi semantik.
 - Suite dokumentasi awal: PROJECT_CONTEXT, ARCHITECTURE, BUSINESS_RULES, DATABASE, API_REFERENCE, CODING_STANDARDS, CHANGELOG.
 - Keputusan teknis fondasi: Laravel 13 API-only, Sanctum auth, SQLite→MySQL, Laravel AI SDK agent+tools, Action layer untuk mutasi data.
 
+## [0.5.0] — 2026-08-24
+
+### Added
+- **Voice input**: `speech_to_text` integration di chat detail screen. Mic button, real-time partial transcription (id_ID locale), auto-stop 30s silence, user review sebelum kirim.
+- **Image capture**: `image_picker` integration — foto struk dari camera atau pilih dari gallery. Preview sebelum kirim, compress 70% quality, max 1200px.
+- **Receipt upload endpoint**: `POST /api/v1/transactions/from-receipt` — multipart image upload, AI vision extraction (merchant, items, total, date, category), return structured data untuk user confirmation.
+- **ReceiptExtractionService**: Service class baru untuk ekstraksi data struk via AI (laravel/ai attachments).
+- **Tabel `receipt_images`**: Migration baru — `user_id`, `image_path`, `extracted_data` (json), `status` (pending/confirmed/failed), `transaction_id` FK.
+- **Voice & Image services** (Flutter): `VoiceService` (STT wrapper) dan `ImagePicker` (camera/gallery + upload).
+- 2 test baru untuk receipt endpoint; total **48 test / 290 assertions hijau**.
+
+### Changed
+- Chat detail input bar: `[camera] [mic] [text field] [send]` — voice & image buttons di sebelah kiri text field.
+- `pubspec.yaml`: Tambah `speech_to_text: ^7.4.0`, `image_picker: ^1.2.3`.
+
 ## [0.4.0] — 2026-08-24
 
 ### Added

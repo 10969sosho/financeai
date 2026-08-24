@@ -34,6 +34,7 @@ Route::prefix('v1')->group(function (): void {
         // Transactions
         Route::get('transactions', [TransactionController::class, 'index']);
         Route::post('transactions', [TransactionController::class, 'store']);
+        Route::post('transactions/from-receipt', [TransactionController::class, 'fromReceipt']);
         Route::put('transactions/{transaction}', [TransactionController::class, 'update']);
         Route::delete('transactions/{transaction}', [TransactionController::class, 'destroy']);
 

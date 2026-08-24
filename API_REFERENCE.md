@@ -205,6 +205,46 @@ Query param `period`: `today | week | month | year` (default `month`) atau `from
 
 ---
 
+## Transactions (receipt upload)
+
+### POST /transactions/from-receipt 🔒
+
+Upload receipt image for AI-powered transaction extraction.
+
+```json
+// Request: multipart/form-data
+// Fields: image (required, max 5MB), description (optional)
+
+// 200
+{
+  "data": {
+    "extracted": {
+      "merchant": "Kopi Kenangan",
+      "items": [
+        { "name": "Kopi Susu", "price": 22000 },
+        { "name": "Croissant", "price": 18000 }
+      ],
+      "total": 40000,
+      "date": "2026-08-24",
+      "category": "Minuman",
+      "type": "expense"
+    },
+    "image_url": "/storage/receipts/receipt_1234567890.jpg",
+    "image_path": "receipts/receipt_1234567890.jpg"
+  }
+}
+```
+
+### Error 422
+```json
+{
+  "message": "Tidak dapat mengekstrak data dari struk.",
+  "raw_response": "..."
+}
+```
+
+---
+
 ## Daftar Endpoint (ringkas)
 
 | Method | Path | Auth | Fungsi |
@@ -220,6 +260,7 @@ Query param `period`: `today | week | month | year` (default `month`) atau `from
 | POST | /chat | 🔒 | kirim pesan → AI action |
 | GET | /transactions | 🔒 | daftar/filter transaksi |
 | POST | /transactions | 🔒 | input manual |
+| POST | /transactions/from-receipt | 🔒 | upload struk → AI ekstraksi |
 | PUT | /transactions/{id} | 🔒 | ubah transaksi |
 | DELETE | /transactions/{id} | 🔒 | hapus (soft) |
 | GET | /categories | 🔒 | daftar kategori |

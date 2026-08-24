@@ -14,9 +14,13 @@ use App\Http\Requests\UpdateTransactionRequest;
 use App\Http\Resources\TransactionResource;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\ReceiptExtractionService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 
 final class TransactionController extends Controller
 {
@@ -96,5 +100,45 @@ final class TransactionController extends Controller
         $this->deleteAction->execute($transaction);
 
         return response()->json(['message' => 'Transaction deleted.']);
+    }
+
+    /**
+     * Upload receipt image and extract transaction data using AI.
+     *
+     * POST /api/v1/transactions/from-receipt
+     */
+    public function fromReceipt(Request $request, ReceiptExtractionService $extraction): JsonResponse
+    {
+        $validated = $request->validate([
+            'image' => 'required|image|max:5120', // max 5MB
+            'description' => 'nullable|string|max:255',
+        ]);
+
+        /** @var User $user */
+        $user = Auth::user();
+        /** @var UploadedFile $image */
+        $image = $request->file('image');
+
+        try {
+            $extracted = $extraction->extract($image);
+
+            // Store the image permanently for future reference
+            $path = $image->store('receipts', 'public');
+
+            return response()->json([
+                'data' => [
+                    'extracted' => $extracted,
+                    'image_url' => Storage::url($path),
+                    'image_path' => $path,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'Gagal memproses struk.',
+                'error' => $e->getMessage(),
+            ], 422);
+        }
     }
 }
