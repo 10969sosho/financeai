@@ -72,7 +72,7 @@ Prioritas implementasi (urutan):
 | 2 | Chat + AI agent + financial actions (text) | ✅ selesai |
 | 3 | Laporan + breakdown | ✅ selesai (tercakup Fase 1) |
 | 4 | Hardening: rate limit, queue async, logging aksi AI | ✅ selesai (rate limit ✅, queue async ✅, activity log ✅) |
-| 5 | Flutter app (Chat, Laporan, Profile) | berikutnya |
+| 5 | Flutter app (Chat, Laporan, Profile) | ✅ selesai |
 | 6 | Voice & image input | - |
 
 ## 8. Dokumentasi Terkait

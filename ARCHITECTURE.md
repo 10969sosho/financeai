@@ -5,7 +5,7 @@
 ## 1. High-Level System
 
 ```text
-Flutter App (nanti)          cURL / Postman (testing fase backend)
+Flutter App (mobile/)         cURL / Postman (testing fase backend)
       │  HTTPS + Bearer token (Sanctum)
       ▼
 Laravel API (stateless, JSON only)
@@ -188,7 +188,53 @@ FinancialAssistant::assertPrompted(fn ($prompt) => /* cek konteks CS-2 */ true);
 
 Fake response dikonsumsi **per step**: fake berisi `ToolCall` membuat SDK mengeksekusi tool sungguhan lalu lanjut ke response fake berikutnya — sehingga pipeline chat→tool→Action→DB teruji penuh tanpa memanggil OpenAI.
 
-## 6. Skalabilitas
+## 6. Flutter App Structure
+
+```text
+mobile/
+├── lib/
+│   ├── config/
+│   │   ├── api_config.dart          # Base URL, endpoints, timeout
+│   │   └── theme.dart               # Material 3 theme (green finance)
+│   ├── models/
+│   │   ├── user.dart
+│   │   ├── category.dart
+│   │   ├── transaction.dart
+│   │   ├── chat_session.dart
+│   │   ├── message.dart
+│   │   └── report.dart              # ReportSummary, CategoryBreakdown, ReportBreakdown
+│   ├── services/
+│   │   ├── api_client.dart          # Dio + auth interceptor + token storage
+│   │   ├── auth_service.dart        # Login/register/logout + Riverpod providers
+│   │   ├── chat_service.dart        # Sessions CRUD + messages + send
+│   │   ├── transaction_service.dart # Transaction CRUD
+│   │   ├── report_service.dart      # Summary + breakdown
+│   │   └── category_service.dart    # Categories list + create
+│   ├── screens/
+│   │   ├── auth/
+│   │   │   ├── login_screen.dart
+│   │   │   └── register_screen.dart
+│   │   ├── chat/
+│   │   │   ├── chat_list_screen.dart    # Session list + create/delete
+│   │   │   └── chat_detail_screen.dart  # Messages + send + poll
+│   │   ├── reports/
+│   │   │   └── reports_screen.dart      # Summary + breakdown + period selector
+│   │   ├── profile/
+│   │   │   └── profile_screen.dart      # User info + settings + logout
+│   │   └── home_screen.dart             # Bottom nav (Chat, Laporan, Profil)
+│   └── main.dart                        # ProviderScope + FinanceAIApp
+├── pubspec.yaml
+└── test/
+```
+
+Prinsip Flutter:
+- **Riverpod** untuk state management (auth state, data fetching).
+- **Dio** untuk HTTP dengan auth interceptor (auto-attach token).
+- **flutter_secure_storage** untuk token persistence.
+- Navigation via `Navigator.push/pop` (state-driven routing).
+- Material 3 dengan green finance seed color (`#2E7D32`).
+
+## 7. Skalabilitas
 
 Fase cepat → siap tumbuh:
 
@@ -198,7 +244,7 @@ Fase cepat → siap tumbuh:
 4. **Provider failover** — AI SDK mendukung failover provider; konfigurasi di env.
 5. **Agregasi laporan** — live query dulu; jika berat, tambah cache per-user-per-periode dengan invalidasi on-write.
 
-## 7. Strategi Testing
+## 8. Strategi Testing
 
 | Level | Cakupan | Cara |
 |---|---|---|

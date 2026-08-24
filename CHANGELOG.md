@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com) — versi semantik.
 - Suite dokumentasi awal: PROJECT_CONTEXT, ARCHITECTURE, BUSINESS_RULES, DATABASE, API_REFERENCE, CODING_STANDARDS, CHANGELOG.
 - Keputusan teknis fondasi: Laravel 13 API-only, Sanctum auth, SQLite→MySQL, Laravel AI SDK agent+tools, Action layer untuk mutasi data.
 
+## [0.4.0] — 2026-08-24
+
+### Added
+- **Flutter mobile app** (`mobile/`) — aplikasi client untuk FinanceAI.
+- **Authentication**: Login & Register screens dengan validasi form, token storage (flutter_secure_storage), auto-login.
+- **Chat feature**: Session list (create, delete, pull-to-refresh), chat detail interface (send message, poll status, typing indicator, suggestion chips).
+- **Laporan (Reports)**: Summary card (pemasukan, pengeluaran, mutasi), category breakdown dengan progress bar, period selector (hari/minggu/bulan/tahun).
+- **Profile**: User info, settings section (placeholder), about section, logout dengan konfirmasi.
+- **API service layer**: Dio HTTP client dengan auth interceptor, endpoint configuration, 6 service classes (auth, chat, transaction, report, category, category).
+- **Models**: User, Category, Transaction, ChatSession, Message, ReportSummary, CategoryBreakdown, ReportBreakdown.
+- **State management**: flutter_riverpod untuk auth state, data fetching, UI state.
+- **Theme**: Material 3 dengan green finance seed color, consistent typography & spacing.
+
 ## [0.3.0] — 2026-08-24
 
 ### Added
