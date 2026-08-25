@@ -13,6 +13,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Collection;
+use Laravel\Ai\Ai;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Ai\Exceptions\AiException;
@@ -182,7 +183,11 @@ final readonly class ChatService
     private function promptAgent(User $user, array $context, string $body): AgentResponse
     {
         try {
-            return (new FinancialAssistant($user, $context))->prompt($body);
+            $agent = new FinancialAssistant($user, $context);
+
+            return Ai::openrouter('dots-studio/dots-3-note-preview:free')
+                ->agent($agent)
+                ->prompt($body);
         } catch (AiException|ConnectionException|\Illuminate\Http\Client\RequestException|\RuntimeException $e) {
             report($e);
 
