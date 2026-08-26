@@ -35,6 +35,9 @@ final class ChatController extends Controller
             $request->string('body')->toString(),
         );
 
+        // Refresh message setelah sync processing
+        $message->refresh();
+
         return response()->json([
             'data' => [
                 'message' => new MessageResource($message),

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/auth_service.dart';
@@ -105,12 +106,38 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   String _getErrorMessage(dynamic error) {
+    if (error is DioException) {
+      switch (error.type) {
+        case DioExceptionType.connectionTimeout:
+        case DioExceptionType.sendTimeout:
+        case DioExceptionType.receiveTimeout:
+          return 'Timeout - server tidak merespon';
+        case DioExceptionType.connectionError:
+          final msg = error.message ?? '';
+          if (msg.contains('SSL') || msg.contains('certificate') || msg.contains('handshake')) {
+            return 'SSL error - periksa sertifikat server';
+          }
+          return 'Tidak dapat terhubung ke server';
+        case DioExceptionType.badCertificate:
+          return 'SSL error - sertifikat tidak valid';
+        case DioExceptionType.cancel:
+          return 'Request dibatalkan';
+        case DioExceptionType.unknown:
+          final msg = error.message ?? '';
+          if (msg.contains('SocketException') || msg.contains('errno')) {
+            return 'Tidak dapat terhubung ke server';
+          }
+          if (msg.contains('422') || msg.contains('already')) {
+            return 'Email sudah terdaftar';
+          }
+          return 'Terjadi kesalahan: ${msg.isNotEmpty ? msg : error.toString()}';
+        default:
+          return 'Terjadi kesalahan, silakan coba lagi';
+      }
+    }
     final message = error.toString();
     if (message.contains('422') || message.contains('already')) {
       return 'Email sudah terdaftar';
-    }
-    if (message.contains('connection') || message.contains('timeout')) {
-      return 'Tidak dapat terhubung ke server';
     }
     return 'Terjadi kesalahan, silakan coba lagi';
   }

@@ -341,8 +341,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
       if (mounted) {
         setState(() {
-          // Remove optimistic message, add real user message + pending assistant
-          _messages.remove(userMessage);
+          // Keep user message, add assistant pending message
           _messages.add(responseMsg);
           _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
         });
@@ -441,7 +440,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
       appBar: AppBar(
@@ -500,23 +498,24 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
             ),
 
           // Input area
-          SafeArea(
-            child: Container(
-              padding: EdgeInsets.only(
-                left: 8,
-                right: 8,
-                top: 8,
-                bottom: bottomPadding > 0 ? bottomPadding : 8,
-              ),
-              decoration: BoxDecoration(
-                color: theme.scaffoldBackgroundColor,
-                border: Border(
-                  top: BorderSide(
-                    color: theme.colorScheme.outlineVariant
-                        .withValues(alpha: 0.3),
-                  ),
+          Container(
+            padding: const EdgeInsets.only(
+              left: 8,
+              right: 8,
+              top: 8,
+              bottom: 8,
+            ),
+            decoration: BoxDecoration(
+              color: theme.scaffoldBackgroundColor,
+              border: Border(
+                top: BorderSide(
+                  color: theme.colorScheme.outlineVariant
+                      .withValues(alpha: 0.3),
                 ),
               ),
+            ),
+            child: SafeArea(
+              top: false,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [

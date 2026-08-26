@@ -74,12 +74,16 @@ final readonly class ChatService
             return $message;
         });
 
-        // 3. Dispatch job ke queue — user tidak menunggu.
-        ProcessChatMessage::dispatch(
-            $assistantMessage->id,
-            $session->id,
-            $user->id,
-        );
+        // 3. Process synchronously — queue worker tidak available di production.
+        try {
+            $this->process($user, $session->id, $assistantMessage);
+        } catch (\Throwable $e) {
+            report($e);
+            $assistantMessage->update([
+                'status' => 'failed',
+                'content' => 'Layanan AI sedang tidak tersedia. Coba lagi sebentar.',
+            ]);
+        }
 
         return ['message' => $assistantMessage, 'session' => $session];
     }
