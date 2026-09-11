@@ -30,7 +30,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
   List<Message> _messages = [];
   bool _isLoading = true;
-  bool _isSending = false;
   Timer? _pollTimer;
 
   // Voice input state
@@ -47,6 +46,9 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   void initState() {
     super.initState();
     _loadMessages();
+    _controller.addListener(() {
+      setState(() {});
+    });
   }
 
   @override
@@ -294,8 +296,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   // ─── Send Message ───────────────────────────────────────────────
 
   Future<void> _sendMessage(String text) async {
-    if (_isSending) return;
-
     final hasImage = _capturedImage != null;
     final body = text.trim();
 
@@ -303,11 +303,10 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
     final imageToSend = _capturedImage;
     final description = _imageDescription.trim();
+    final now = DateTime.now();
 
     _controller.clear();
-    _focusNode.unfocus();
     setState(() {
-      _isSending = true;
       _capturedImage = null;
       _imageDescription = '';
     });
@@ -319,16 +318,25 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
       // Create optimistic user message
       final userMessage = Message(
-        id: DateTime.now().millisecondsSinceEpoch,
+        id: now.millisecondsSinceEpoch,
         role: 'user',
         content: displayContent,
         status: 'completed',
-        createdAt: DateTime.now(),
+        createdAt: now,
+      );
+
+      // Create typing indicator (assistant pending)
+      final typingMessage = Message(
+        id: now.millisecondsSinceEpoch + 1,
+        role: 'assistant',
+        content: '',
+        status: 'pending',
+        createdAt: now.add(const Duration(milliseconds: 1)),
       );
 
       setState(() {
         _messages.add(userMessage);
-        _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        _messages.add(typingMessage);
       });
       _scrollToBottom();
 
@@ -341,16 +349,27 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
       if (mounted) {
         setState(() {
-          // Keep user message, add assistant pending message
-          _messages.add(responseMsg);
-          _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          // Remove typing indicator, add real response
+          _messages.removeWhere((m) => m.id == typingMessage.id);
+          // Update response timestamp to be after user message
+          final updatedResponse = Message(
+            id: responseMsg.id,
+            role: responseMsg.role,
+            content: responseMsg.content,
+            status: responseMsg.status,
+            metadata: responseMsg.metadata,
+            createdAt: now.add(const Duration(milliseconds: 2)),
+          );
+          _messages.add(updatedResponse);
         });
         _scrollToBottom();
-        _startPollingIfNeeded();
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isSending = false);
+        // Remove typing indicator on error
+        setState(() {
+          _messages.removeWhere((m) => m.status == 'pending' && m.role == 'assistant');
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Gagal mengirim pesan: $e'),
@@ -363,10 +382,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
             ),
           ),
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isSending = false);
       }
     }
   }
@@ -482,8 +497,8 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                       ),
           ),
 
-          // Typing indicator
-          if (_isSending || _messages.any((m) => m.isPending))
+          // Typing indicator — hanya jika ada message pending dari polling
+          if (_messages.any((m) => m.isPending))
             const _TypingIndicator(),
 
           // Image preview
@@ -616,7 +631,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   }
 
   bool _canSend() {
-    if (_isSending || _isRecording) return false;
+    if (_isRecording) return false;
     if (_controller.text.trim().isNotEmpty) return true;
     if (_capturedImage != null) return true;
     return false;
@@ -884,6 +899,50 @@ class _AssistantBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    // Typing indicator bubble
+    if (message.isPending && message.content.isEmpty) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.78,
+          ),
+          margin: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(4),
+              topRight: Radius.circular(18),
+              bottomLeft: Radius.circular(18),
+              bottomRight: Radius.circular(18),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'AI sedang mengetik...',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Align(
       alignment: Alignment.centerLeft,

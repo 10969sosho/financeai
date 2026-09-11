@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'config/theme.dart';
 import 'services/auth_service.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/chat/chat_list_screen.dart';
 import 'screens/home_screen.dart';
 
 void main() {
@@ -19,6 +20,13 @@ class FinanceAIApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authStatus = ref.watch(authStateProvider);
+
+    // Invalidate sessions saat login baru
+    ref.listen<AuthStatus>(authStateProvider, (prev, next) {
+      if (next == AuthStatus.authenticated) {
+        ref.invalidate(sessionsProvider);
+      }
+    });
 
     return MaterialApp(
       title: 'FinanceAI',
